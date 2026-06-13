@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
         .merge(
             Router::new()
                 .route("/", get(index))
-                .with_state(SharedIndexState::new())
+                .with_state(SharedIndexState::builder().build())
                 .layer(middleware::from_fn(check_access)),
         )
         .layer(
@@ -76,7 +76,7 @@ async fn check_access(
         .get::<MatchedPath>()
         .map(|mp| mp.as_str() != "/login")
         .unwrap_or(true)
-        .then(async move || {
+        .then(async || {
             session
                 .get::<bool>("is_authenticated")
                 .await
@@ -86,7 +86,7 @@ async fn check_access(
         .pipe(OptionFuture::from)
         .await
         .unwrap_or(true)
-        .then(async move || next.run(request).await)
+        .then(async || next.run(request).await)
         .pipe(OptionFuture::from)
         .await
         .unwrap_or_else(|| Redirect::to("/login").into_response())
@@ -125,7 +125,7 @@ struct LoginTemplate {
 }
 
 async fn index(State(state): State<SharedIndexState>) -> String {
-    state.update();
+    state.update().await;
 
     format!("Hello {}", state.date())
 }
