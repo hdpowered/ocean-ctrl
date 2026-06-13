@@ -26,6 +26,25 @@ pub struct GameServerState {
     pub has_player: bool,
 }
 
+impl GameServerState {
+    pub fn new(id: String, name: String) -> Self {
+        Self {
+            id,
+            name,
+            is_online: false,
+            has_player: false,
+        }
+    }
+
+    pub fn set_is_online(self, is_online: bool) -> Self {
+        Self { is_online, ..self }
+    }
+
+    pub fn set_has_player(self, has_player: bool) -> Self {
+        Self { has_player, ..self }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoginRequest {
     pub password: String,

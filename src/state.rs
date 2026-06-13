@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::{convert, mem};
 
 use chrono::{DateTime, Local, TimeDelta, Utc};
@@ -50,23 +50,44 @@ impl SharedIndexState {
         server_id
             .pipe(|server_id| self.require_server(server_id))
             .ok()
-            .map(async |server: GameServer| {
-                let text = server
+            .map(async |server| {
+                let player_cnt = server
                     .config
                     .cmd_list_server_players
                     .pipe_as_ref(utils::await_process_output)
-                    .await;
-                todo!("parse player list from text: {text}");
+                    .await
+                    .pipe_as_ref(utils::match_player_count_online);
+
+                let is_online: bool;
+                let has_player: bool;
+
+                if let Some(cnt) = player_cnt {
+                    is_online = true;
+                    has_player = cnt > 0;
+                    info!("check: %s player in server {}", server_id)
+                } else {
+                    is_online = false;
+                    has_player = false;
+                    info!("check: server {} not online", server_id)
+                };
+
+                server
+                    .state()
+                    .set_is_online(is_online)
+                    .set_has_player(has_player)
+                    .pipe(|state| server.set_state(state));
+
+                is_online
             })
             .pipe(OptionFuture::from)
             .await
             .unwrap_or(false)
     }
 
-    pub fn load_servers(&self, servers: Vec<(GameServerConfig, GameServerState)>) {
+    pub fn load_servers(&self, servers: Vec<GameServerConfig>) {
         let servers = servers
             .into_iter()
-            .map(|(config, state)| (config.id.clone(), GameServer { config, state }))
+            .map(|config| (config.id.clone(), GameServer::new(config)))
             .collect();
         self.state()
             .set_servers(servers)
@@ -87,7 +108,7 @@ impl SharedIndexState {
             server_id
                 .pipe(|server_id| self.require_server(server_id))
                 .map_or_else(convert::identity, |server| {
-                    if server.state.is_online {
+                    if server.state().is_online {
                         format!("服务器 {server_id} 已在线").tap(|_| {
                             warn!(
                                 "server {} online while should have no server online",
@@ -114,10 +135,11 @@ impl SharedIndexState {
         let output = server_id
             .pipe(|server_id| self.require_server(server_id))
             .map_or_else(convert::identity, |server| {
-                if !server.state.is_online {
+                let state = server.state();
+                if state.is_online {
                     format!("服务器 {server_id} 不在线, 拒绝关闭")
                         .tap(|_| warn!("stop server {} failed: server not online", server_id))
-                } else if server.state.has_player {
+                } else if state.has_player {
                     format!("服务器 {server_id} 运行中, 拒绝关闭")
                         .tap(|_| warn!("stop server {} failed: has player", server_id))
                 } else {
@@ -239,7 +261,28 @@ impl IndexState {
 #[derive(Debug, Clone)]
 struct GameServer {
     config: GameServerConfig,
-    state: GameServerState,
+    state: Arc<RwLock<GameServerState>>,
+}
+
+impl GameServer {
+    fn new(config: GameServerConfig) -> Self {
+        let state = GameServerState::new(config.id.clone(), config.name.clone())
+            .pipe(RwLock::new)
+            .pipe(Arc::new);
+
+        Self { config, state }
+    }
+
+    fn state(&self) -> GameServerState {
+        self.state.read().unwrap().clone()
+    }
+
+    fn set_state(&self, state: GameServerState) -> GameServerState {
+        self.state
+            .write()
+            .unwrap()
+            .pipe_deref_mut(|g| mem::replace(g, state))
+    }
 }
 
 mod utils {
@@ -252,6 +295,10 @@ mod utils {
 
     pub fn time_now_string() -> String {
         Local::now().to_rfc3339()
+    }
+
+    pub fn match_player_count_online(list_output: &str) -> Option<usize> {
+        todo!("parse player count from /list output: {list_output}")
     }
 
     pub fn spawn_process<T: AsRef<str>>(cmd: &[T]) {
