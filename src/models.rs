@@ -1,7 +1,6 @@
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
@@ -9,7 +8,6 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct GameServerConfig {
     pub id: String,
     pub name: String,
@@ -19,7 +17,6 @@ pub struct GameServerConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)]
 pub struct GameServerState {
     pub id: String,
     pub name: String,
