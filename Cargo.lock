@@ -671,7 +671,6 @@ dependencies = [
  "tap",
  "tokio",
  "toml",
- "tower",
  "tower-sessions",
  "tracing",
  "tracing-subscriber",
