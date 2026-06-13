@@ -46,7 +46,6 @@ impl SharedIndexState {
         self.set_state(state);
     }
 
-    #[allow(dead_code)]
     async fn check_server_players(&self, server_id: &str) -> bool {
         server_id
             .pipe(|server_id| self.require_server(server_id))
@@ -64,7 +63,6 @@ impl SharedIndexState {
             .unwrap_or(false)
     }
 
-    #[allow(dead_code)]
     pub fn load_servers(&self, servers: Vec<(GameServerConfig, GameServerState)>) {
         let servers = servers
             .into_iter()
@@ -75,7 +73,6 @@ impl SharedIndexState {
             .pipe(|state| self.set_state(state));
     }
 
-    #[allow(dead_code)]
     pub fn start_server(&self, server_id: &str) {
         let prev_state = self.state();
         let output = if prev_state.in_server_start_cooldown {
@@ -113,7 +110,6 @@ impl SharedIndexState {
             .pipe(|state| self.set_state(state));
     }
 
-    #[allow(dead_code)]
     pub fn stop_server(&self, server_id: &str) {
         let output = server_id
             .pipe(|server_id| self.require_server(server_id))
@@ -237,7 +233,6 @@ impl SharedIndexStateBuilder {
         }
     }
 
-    #[allow(dead_code)]
     pub fn output_shift_time(mut self, output_shift_time: TimeDelta) -> Self {
         self.output_shift_time = output_shift_time;
         self
@@ -269,7 +264,6 @@ struct IndexState {
     has_server_online: bool,
     in_server_start_cooldown: bool,
 
-    #[allow(dead_code)]
     output: String,
     output_shift_time: TimeDelta,
     last_output_time: DateTime<Utc>,
