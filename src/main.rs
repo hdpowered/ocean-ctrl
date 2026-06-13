@@ -1,3 +1,4 @@
+mod config;
 mod models;
 
 use std::fs;
@@ -18,11 +19,13 @@ use tap::{Pipe, Tap};
 use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
 use tracing::debug;
 
-use crate::models::*;
+use models::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
+    config::init()?;
 
     let config = {
         const CONFIG_FILEPATH: &str = "config.toml";
@@ -95,10 +98,8 @@ async fn login_page() -> impl IntoResponse {
     .tap(|t| debug!("Render login state {:?}", t))
 }
 
-const ACCESS_PASSWORD: &str = "password";
-
 async fn login_action(session: Session, Form(request): Form<LoginRequest>) -> impl IntoResponse {
-    if request.password == ACCESS_PASSWORD {
+    if request.password == config::access_password() {
         session
             .insert("is_authenticated", true)
             .await
