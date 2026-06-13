@@ -8,6 +8,7 @@ anyhow = "1.0.102"
 askama = "0.16.0"
 askama_web = { version = "0.16.0", features = ["axum-0.8", "tracing-0.1"] }
 axum = "0.8.9"
+chrono = { version = "0.4.45", features = ["clock"] }
 const_format = "0.2.36"
 dotenvy = "0.15.7"
 futures = "0.3.32"

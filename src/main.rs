@@ -1,5 +1,6 @@
 mod config;
 mod models;
+mod state;
 
 use std::fs;
 
@@ -8,7 +9,7 @@ use askama::Template;
 use askama_web::WebTemplate;
 use axum::{
     Form, Router,
-    extract::{MatchedPath, Request},
+    extract::{MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Redirect},
     routing::get,
@@ -19,7 +20,8 @@ use tap::{Pipe, Tap};
 use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
 use tracing::debug;
 
-use models::*;
+use models::{AppConfig, LoginRequest};
+use state::SharedIndexState;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -35,21 +37,20 @@ async fn main() -> Result<()> {
             .context(formatcp!("Failed to parse {CONFIG_FILEPATH}"))?
     };
 
-    let session_store = MemoryStore::default();
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(false)
-        .with_expiry(Expiry::OnSessionEnd);
-
-    let public_router = Router::new().route("/login", get(login_page).post(login_action));
-
-    let protected_router = Router::new()
-        .route("/", get(index))
-        .layer(middleware::from_fn(check_access));
-
     let app = Router::new()
-        .merge(public_router)
-        .merge(protected_router)
-        .layer(session_layer);
+        .merge(Router::new().route("/login", get(login_page).post(login_action)))
+        .merge(
+            Router::new()
+                .route("/", get(index))
+                .with_state(SharedIndexState::new())
+                .layer(middleware::from_fn(check_access)),
+        )
+        .layer(
+            MemoryStore::default()
+                .pipe(SessionManagerLayer::new)
+                .with_secure(false)
+                .with_expiry(Expiry::OnSessionEnd),
+        );
 
     let listener = {
         let addr = format!("{}:{}", config.host, config.port);
@@ -117,12 +118,14 @@ async fn login_action(session: Session, Form(request): Form<LoginRequest>) -> im
     }
 }
 
-#[derive(Template, WebTemplate, Debug, Clone)]
+#[derive(Debug, Clone, Template, WebTemplate)]
 #[template(path = "login.html")]
 struct LoginTemplate {
     is_not_failed: bool,
 }
 
-async fn index() -> String {
-    "Hello".to_owned()
+async fn index(State(state): State<SharedIndexState>) -> String {
+    state.update();
+
+    format!("Hello {}", state.date())
 }
