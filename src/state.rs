@@ -153,75 +153,6 @@ impl SharedIndexState {
     }
 }
 
-mod utils {
-    use std::ops::Not;
-
-    use futures::future::OptionFuture;
-    use tokio::process::Command;
-
-    use super::*;
-
-    pub fn time_now_string() -> String {
-        Local::now().to_rfc3339()
-    }
-
-    pub fn spawn_process<T: AsRef<str>>(cmd: &[T]) {
-        cmd.is_empty().not().then(|| {
-            Command::new(cmd[0].as_ref())
-                .args(cmd[1..].iter().map(AsRef::as_ref))
-                .spawn()
-                .inspect_err(|e| {
-                    error!(
-                        "failed to start process of command {:?}: {:?}",
-                        cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
-                        e
-                    )
-                })
-                .map(|mut child| {
-                    tokio::spawn(async move { child.wait().await.inspect_err(|e| error!(?e)) })
-                })
-                .ok();
-        });
-    }
-
-    pub async fn await_process_output<T: AsRef<str>>(cmd: &[T]) -> String {
-        cmd.is_empty()
-            .not()
-            .then(async || {
-                Command::new(cmd[0].as_ref())
-                    .args(cmd[1..].iter().map(AsRef::as_ref))
-                    .output()
-                    .await
-                    .inspect_err(|e| {
-                        error!(
-                            "failed to start process of command {:?}: {:?}",
-                            cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
-                            e
-                        )
-                    })
-                    .map(|output| {
-                        if output.status.success() {
-                            String::from_utf8(output.stdout).inspect_err(|e| error!(?e))
-                        } else {
-                            String::from_utf8(output.stderr)
-                                .inspect_err(|e| error!(?e))
-                                .inspect(|stderr| {
-                                    error!(
-                                        "process of command {:?} failed with stderr: {}",
-                                        cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
-                                        stderr
-                                    )
-                                })
-                        }
-                        .unwrap_or_default()
-                    })
-                    .unwrap_or_default()
-            })
-            .pipe(OptionFuture::from)
-            .await
-            .unwrap_or_default()
-    }
-}
 pub struct SharedIndexStateBuilder {
     output_shift_time: TimeDelta,
 }
@@ -309,4 +240,74 @@ impl IndexState {
 struct GameServer {
     config: GameServerConfig,
     state: GameServerState,
+}
+
+mod utils {
+    use std::ops::Not;
+
+    use futures::future::OptionFuture;
+    use tokio::process::Command;
+
+    use super::*;
+
+    pub fn time_now_string() -> String {
+        Local::now().to_rfc3339()
+    }
+
+    pub fn spawn_process<T: AsRef<str>>(cmd: &[T]) {
+        cmd.is_empty().not().then(|| {
+            Command::new(cmd[0].as_ref())
+                .args(cmd[1..].iter().map(AsRef::as_ref))
+                .spawn()
+                .inspect_err(|e| {
+                    error!(
+                        "failed to start process of command {:?}: {:?}",
+                        cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
+                        e
+                    )
+                })
+                .map(|mut child| {
+                    tokio::spawn(async move { child.wait().await.inspect_err(|e| error!(?e)) })
+                })
+                .ok();
+        });
+    }
+
+    pub async fn await_process_output<T: AsRef<str>>(cmd: &[T]) -> String {
+        cmd.is_empty()
+            .not()
+            .then(async || {
+                Command::new(cmd[0].as_ref())
+                    .args(cmd[1..].iter().map(AsRef::as_ref))
+                    .output()
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "failed to start process of command {:?}: {:?}",
+                            cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
+                            e
+                        )
+                    })
+                    .map(|output| {
+                        if output.status.success() {
+                            String::from_utf8(output.stdout).inspect_err(|e| error!(?e))
+                        } else {
+                            String::from_utf8(output.stderr)
+                                .inspect_err(|e| error!(?e))
+                                .inspect(|stderr| {
+                                    error!(
+                                        "process of command {:?} failed with stderr: {}",
+                                        cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
+                                        stderr
+                                    )
+                                })
+                        }
+                        .unwrap_or_default()
+                    })
+                    .unwrap_or_default()
+            })
+            .pipe(OptionFuture::from)
+            .await
+            .unwrap_or_default()
+    }
 }
