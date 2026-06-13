@@ -5,9 +5,17 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+askama = "0.16.0"
+askama_web = { version = "0.16.0", features = ["axum-0.8", "tracing-0.1"] }
 axum = "0.8.9"
 const_format = "0.2.36"
+dotenvy = "0.15.7"
+futures = "0.3.32"
 serde = { version = "1.0.228", features = ["derive"] }
 tap = "1.0.1"
 tokio = { version = "1.52.3", features = ["full"] }
 toml = "1.1.2"
+tower = "0.5.3"
+tower-sessions = "0.15.0"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"

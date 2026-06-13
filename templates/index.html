@@ -1,0 +1,81 @@
+<html>
+  <head>
+    <title>Ocean</title>
+  </head>
+  <body>
+    <div class="info">
+      <h1>Ocean 管理页</h1>
+      <p>{{ date }}</p>
+      <form method="post">
+          <button type="submit">刷新</button>
+      </form>
+    </div>
+    <div class="server-list">
+      <h2>服务器列表</h2>
+      <div class="server-container">
+        {% for server in servers %}
+        <div class="server-item">
+          <h3>{{ server.name }}</h3>
+
+          {# 0 #}
+          {% if server.is_online %}
+
+          <small>在线</small>
+
+          {# 1 #}
+          {% if server.has_player %}
+          <button type="button" disabled>运行中</button>
+          {# 1 #}
+          {% else %}
+          <form method="post">
+            <input type="hidden" name="action" value="stop_server">
+            <input type="hidden" name="server_id" value="{{ server.id }}">
+            <button type="submit">按下可暂停</button>
+          </form>
+          {# 1 #}
+          {% endif %}
+
+          {# 0 #}
+          {% else %}
+
+          <small>离线</small>
+
+          {# 1 #}
+          {% if in_server_start_cooldown %}
+
+          <button type="button" disabled>启动系统散热中</button>
+
+          {# 1 #}
+          {% else %}
+
+          {# 2 #}
+          {% if has_server_online %}
+          <button type="button" disabled>服务器运行时占用中</button>
+          {# 2 #}
+          {% else %}
+          <form method="post">
+            <input type="hidden" name="action" value="start_server">
+            <input type="hidden" name="server_id" value="{{ server.id }}">
+            <button type="submit">按下可启动</button>
+          </form>
+          {# 2 #}
+          {% endif %}
+
+          {# 1 #}
+          {% endif %}
+
+          {# 0 #}
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% if output %}
+    <div class="output">
+      <h2>最近的输出</h2>
+      <p>{{ output }}</p>
+    </div>
+    {% endif %}
+    <address>Copyright © 2026 Ocean Players Group</address>
+  </body>
+</html>

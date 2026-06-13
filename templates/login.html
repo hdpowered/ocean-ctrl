@@ -1,0 +1,16 @@
+<html>
+  <head>
+    <title>Login</title>
+  </head>
+  <body>
+    <form method="post">
+      {% if is_not_failed %}
+      <label for="password">输入口令</label>
+      {% else %}
+      <label for="password">口令错误, 重新输入</label>
+      {% endif %}
+      <input type="password" id="password" name="password">
+      <button type="submit">认证</button>
+    </form>
+  </body>
+</html>

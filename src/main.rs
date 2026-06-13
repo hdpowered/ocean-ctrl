@@ -3,14 +3,27 @@ mod models;
 use std::fs;
 
 use anyhow::{Context, Result};
-use axum::{Router, routing::get};
+use askama::Template;
+use askama_web::WebTemplate;
+use axum::{
+    Form, Router,
+    extract::{MatchedPath, Request},
+    middleware::{self, Next},
+    response::{IntoResponse, Redirect},
+    routing::get,
+};
 use const_format::formatcp;
-use tap::Pipe;
+use futures::future::OptionFuture;
+use tap::{Pipe, Tap};
+use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
+use tracing::debug;
 
-use crate::models::AppConfig;
+use crate::models::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
     let config = {
         const CONFIG_FILEPATH: &str = "config.toml";
         fs::read_to_string("config.toml")
@@ -19,7 +32,21 @@ async fn main() -> Result<()> {
             .context(formatcp!("Failed to parse {CONFIG_FILEPATH}"))?
     };
 
-    let app = Router::new().route("/", get(root));
+    let session_store = MemoryStore::default();
+    let session_layer = SessionManagerLayer::new(session_store)
+        .with_secure(false)
+        .with_expiry(Expiry::OnSessionEnd);
+
+    let public_router = Router::new().route("/login", get(login_page).post(login_action));
+
+    let protected_router = Router::new()
+        .route("/", get(index))
+        .layer(middleware::from_fn(check_access));
+
+    let app = Router::new()
+        .merge(public_router)
+        .merge(protected_router)
+        .layer(session_layer);
 
     let listener = {
         let addr = format!("{}:{}", config.host, config.port);
@@ -35,6 +62,66 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn root() -> String {
+async fn check_access(
+    session: Session,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> impl IntoResponse {
+    request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|mp| mp.as_str() != "/login")
+        .unwrap_or(true)
+        .then(async move || {
+            session
+                .get::<bool>("is_authenticated")
+                .await
+                .unwrap_or_default()
+                .unwrap_or(false)
+        })
+        .pipe(OptionFuture::from)
+        .await
+        .unwrap_or(true)
+        .then(async move || next.run(request).await)
+        .pipe(OptionFuture::from)
+        .await
+        .unwrap_or_else(|| Redirect::to("/login").into_response())
+}
+
+async fn login_page() -> impl IntoResponse {
+    LoginTemplate {
+        is_not_failed: true,
+    }
+    .tap(|t| debug!("Render login state {:?}", t))
+}
+
+const ACCESS_PASSWORD: &str = "password";
+
+async fn login_action(session: Session, Form(request): Form<LoginRequest>) -> impl IntoResponse {
+    if request.password == ACCESS_PASSWORD {
+        session
+            .insert("is_authenticated", true)
+            .await
+            .inspect_err(|e| debug!("Failed to set session: {e}"))
+            .ok();
+        Redirect::to("/")
+            .tap(|_| debug!("Redirect to root"))
+            .into_response()
+    } else {
+        LoginTemplate {
+            is_not_failed: false,
+        }
+        .tap(|t| debug!("Render login state {:?}", t))
+        .into_response()
+    }
+}
+
+#[derive(Template, WebTemplate, Debug, Clone)]
+#[template(path = "login.html")]
+struct LoginTemplate {
+    is_not_failed: bool,
+}
+
+async fn index() -> String {
     "Hello".to_owned()
 }
