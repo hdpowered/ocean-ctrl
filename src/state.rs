@@ -298,7 +298,27 @@ mod utils {
     }
 
     pub fn match_player_count_online(list_output: &str) -> Option<usize> {
-        todo!("parse player count from /list output: {list_output}")
+        const PATTERN: &str = r"^There are\s+(\d+)\s+of a max of\s+\d+\s+players online";
+
+        regex::Regex::new(PATTERN)
+            .inspect_err(|e| error!("failed to compile regex: {:?}", e))
+            .ok()
+            .and_then(|re| {
+                re.captures(list_output).and_then(|cap| {
+                    cap.get(1).map(|m| {
+                        m.as_str()
+                            .parse::<usize>()
+                            .inspect_err(|e| {
+                                error!(
+                                    "failed to parse player count from string {:?}: {:?}",
+                                    m.as_str(),
+                                    e
+                                )
+                            })
+                            .ok()
+                    })?
+                })
+            })
     }
 
     pub fn spawn_process<T: AsRef<str>>(cmd: &[T]) {
@@ -356,5 +376,25 @@ mod utils {
             .pipe(OptionFuture::from)
             .await
             .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_match_player_count_online() {
+            let output = "There are 0 of a max of 20 players online";
+            assert_eq!(match_player_count_online(output), Some(0));
+
+            let output = "There are 3 of a max of 20 players online: player1, player2, player3";
+            assert_eq!(match_player_count_online(output), Some(3));
+
+            let output = "There are 10 of a max of 20 players online: ...";
+            assert_eq!(match_player_count_online(output), Some(10));
+
+            let output = "Invalid output";
+            assert_eq!(match_player_count_online(output), None);
+        }
     }
 }
