@@ -20,8 +20,11 @@ use tap::{Pipe, Tap};
 use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
 use tracing::debug;
 
-use models::{AppConfig, LoginRequest};
-use state::SharedIndexState;
+use crate::{models::IndexForm, state::SharedIndexState};
+use crate::{
+    models::{AppConfig, GameServerState, LoginForm},
+    state::IndexState,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,8 +44,12 @@ async fn main() -> Result<()> {
         .merge(Router::new().route("/login", get(login_page).post(login_action)))
         .merge(
             Router::new()
-                .route("/", get(index))
-                .with_state(SharedIndexState::builder().build())
+                .route("/", get(index_page).post(index_action))
+                .with_state(
+                    SharedIndexState::builder()
+                        .build()
+                        .tap(|s| s.load_servers(&config.servers)),
+                )
                 .layer(middleware::from_fn(check_access)),
         )
         .layer(
@@ -99,8 +106,8 @@ async fn login_page() -> impl IntoResponse {
     .tap(|t| debug!("Render login state {:?}", t))
 }
 
-async fn login_action(session: Session, Form(request): Form<LoginRequest>) -> impl IntoResponse {
-    if request.password == config::access_password() {
+async fn login_action(session: Session, Form(form): Form<LoginForm>) -> impl IntoResponse {
+    if form.password == config::access_password() {
         session
             .insert("is_authenticated", true)
             .await
@@ -124,8 +131,54 @@ struct LoginTemplate {
     is_not_failed: bool,
 }
 
-async fn index(State(state): State<SharedIndexState>) -> String {
+async fn index_page(State(state): State<SharedIndexState>) -> impl IntoResponse {
     state.update().await;
+    state.state().pipe(IndexTemplate::from)
+}
 
-    format!("Hello {}", state.date())
+async fn index_action(
+    State(state): State<SharedIndexState>,
+    Form(form): Form<IndexForm>,
+) -> impl IntoResponse {
+    state.update().await;
+    match form.action.as_deref() {
+        Some("start_server") => {
+            if let Some(id) = form.server_id {
+                state.start_server(&id)
+            }
+        }
+        Some("stop_server") => {
+            if let Some(id) = form.server_id {
+                state.stop_server(&id)
+            }
+        }
+        Some(unknown) => debug!("Unknown action: {}", unknown),
+        None => (),
+    };
+    state.state().pipe(IndexTemplate::from)
+}
+
+#[derive(Debug, Clone, Template, WebTemplate)]
+#[template(path = "index.html")]
+struct IndexTemplate {
+    date: String,
+    servers: Vec<GameServerState>,
+    has_server_online: bool,
+    in_server_start_cooldown: bool,
+    has_output: bool,
+    output: String,
+}
+
+impl From<IndexState> for IndexTemplate {
+    fn from(state: IndexState) -> Self {
+        let servers = state.servers();
+        Self {
+            date: state.date,
+            servers,
+            has_server_online: state.has_server_online,
+            in_server_start_cooldown: state.in_server_start_cooldown,
+            has_output: !&(state.output).is_empty(),
+            output: state.output,
+        }
+    }
 }

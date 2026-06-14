@@ -46,6 +46,12 @@ impl GameServerState {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct LoginRequest {
+pub struct LoginForm {
     pub password: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IndexForm {
+    pub action: Option<String>,
+    pub server_id: Option<String>,
 }

@@ -18,15 +18,11 @@ impl SharedIndexState {
         SharedIndexStateBuilder::new()
     }
 
-    pub fn date(&self) -> String {
-        self.state().date
-    }
-
     pub async fn update(&self) {
         let state = self.state();
         let to_clear_output = state.last_output_time + state.output_shift_time < Utc::now();
         let has_server_online = state
-            .servers
+            .servers_map
             .keys()
             .pipe(stream::iter)
             .any(async |server_id| self.check_server_players(server_id).await)
@@ -64,7 +60,7 @@ impl SharedIndexState {
                 if let Some(cnt) = player_cnt {
                     is_online = true;
                     has_player = cnt > 0;
-                    info!("check: %s player in server {}", server_id)
+                    info!("check: {} player in server {}", cnt, server_id)
                 } else {
                     is_online = false;
                     has_player = false;
@@ -84,13 +80,14 @@ impl SharedIndexState {
             .unwrap_or(false)
     }
 
-    pub fn load_servers(&self, servers: Vec<GameServerConfig>) {
+    pub fn load_servers(&self, servers: &[GameServerConfig]) {
         let servers = servers
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|config| (config.id.clone(), GameServer::new(config)))
             .collect();
         self.state()
-            .set_servers(servers)
+            .set_servers_map(servers)
             .pipe(|state| self.set_state(state));
     }
 
@@ -136,7 +133,7 @@ impl SharedIndexState {
             .pipe(|server_id| self.require_server(server_id))
             .map_or_else(convert::identity, |server| {
                 let state = server.state();
-                if state.is_online {
+                if !state.is_online {
                     format!("服务器 {server_id} 不在线, 拒绝关闭")
                         .tap(|_| warn!("stop server {} failed: server not online", server_id))
                 } else if state.has_player {
@@ -157,13 +154,13 @@ impl SharedIndexState {
     }
 
     fn require_server(&self, server_id: &str) -> Result<GameServer, String> {
-        self.state().servers.remove(server_id).ok_or_else(|| {
+        self.state().servers_map.remove(server_id).ok_or_else(|| {
             format!("不存在的的服务器 {server_id}")
                 .tap(|_| warn!("server {} not exists", server_id))
         })
     }
 
-    fn state(&self) -> IndexState {
+    pub fn state(&self) -> IndexState {
         self.0.lock().unwrap().clone()
     }
 
@@ -186,6 +183,7 @@ impl SharedIndexStateBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn output_shift_time(mut self, output_shift_time: TimeDelta) -> Self {
         self.output_shift_time = output_shift_time;
         self
@@ -194,7 +192,7 @@ impl SharedIndexStateBuilder {
     pub fn build(self) -> SharedIndexState {
         IndexState {
             date: "NaN".to_owned(),
-            servers: HashMap::new(),
+            servers_map: HashMap::new(),
 
             has_server_online: false,
             in_server_start_cooldown: false,
@@ -209,20 +207,27 @@ impl SharedIndexStateBuilder {
 }
 
 #[derive(Debug, Clone)]
-struct IndexState {
-    date: String,
+pub struct IndexState {
+    pub date: String,
 
-    servers: HashMap<String, GameServer>,
+    servers_map: HashMap<String, GameServer>,
 
-    has_server_online: bool,
-    in_server_start_cooldown: bool,
+    pub has_server_online: bool,
+    pub in_server_start_cooldown: bool,
 
-    output: String,
+    pub output: String,
     output_shift_time: TimeDelta,
     last_output_time: DateTime<Utc>,
 }
 
 impl IndexState {
+    pub fn servers(&self) -> Vec<GameServerState> {
+        self.servers_map
+            .values()
+            .map(|server| server.state())
+            .collect()
+    }
+
     fn update_date(self) -> Self {
         Self {
             date: utils::time_now_string(),
@@ -230,8 +235,11 @@ impl IndexState {
         }
     }
 
-    fn set_servers(self, servers: HashMap<String, GameServer>) -> Self {
-        Self { servers, ..self }
+    fn set_servers_map(self, servers: HashMap<String, GameServer>) -> Self {
+        Self {
+            servers_map: servers,
+            ..self
+        }
     }
 
     fn set_has_server_online(self, has_server_online: bool) -> Self {
@@ -362,7 +370,7 @@ mod utils {
                             String::from_utf8(output.stderr)
                                 .inspect_err(|e| error!(?e))
                                 .inspect(|stderr| {
-                                    error!(
+                                    info!(
                                         "process of command {:?} failed with stderr: {}",
                                         cmd.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
                                         stderr
