@@ -1,7 +1,12 @@
 [package]
 name = "ocean-ctrl"
-version = "0.1.0-dev"
+version = "0.1.0"
 edition = "2024"
+authors = ["Ocean Players Group"]
+description = "Ocean server controller."
+homepage = "https://github.com/hdpowered/ocean-ctrl"
+repository = "https://github.com/hdpowered/ocean-ctrl"
+license = "MIT"
 
 [dependencies]
 anyhow = "1.0.102"
