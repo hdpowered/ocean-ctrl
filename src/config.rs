@@ -7,7 +7,7 @@ use tap::Pipe;
 use crate::models::AppConfig;
 
 const PREFIX: &str = "OCEAN_CTRL";
-const DEFAULT_CONFIG_FILEPATH: &str = "config.toml";
+const DEFAULT_CONFIG_PATH: &str = "config.toml";
 
 static APP_CONFIG: OnceLock<AppConfig> = OnceLock::new();
 
@@ -19,8 +19,8 @@ pub fn app_config() -> AppConfig {
 }
 
 pub fn init() -> Result<()> {
-    let config_filepath = std::env::var(key("CONFIG_FILEPATH"))
-        .unwrap_or_else(|_| DEFAULT_CONFIG_FILEPATH.to_owned());
+    let config_filepath =
+        std::env::var(key("CONFIG_PATH")).unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_owned());
 
     let settings = Config::builder()
         .add_source(config_filepath.pipe_borrow(File::with_name))
