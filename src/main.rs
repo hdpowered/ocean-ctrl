@@ -2,8 +2,6 @@ mod config;
 mod models;
 mod state;
 
-use std::fs;
-
 use anyhow::{Context, Result};
 use askama::Template;
 use askama_web::WebTemplate;
@@ -14,7 +12,6 @@ use axum::{
     response::{IntoResponse, Redirect},
     routing::get,
 };
-use const_format::formatcp;
 use futures::future::OptionFuture;
 use tap::{Pipe, Tap};
 use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
@@ -22,7 +19,7 @@ use tracing::debug;
 
 use crate::{models::IndexForm, state::SharedIndexState};
 use crate::{
-    models::{AppConfig, GameServerState, LoginForm},
+    models::{GameServerState, LoginForm},
     state::IndexState,
 };
 
@@ -30,15 +27,8 @@ use crate::{
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
-    config::init()?;
-
-    let config = {
-        const CONFIG_FILEPATH: &str = "config.toml";
-        fs::read_to_string("config.toml")
-            .context(formatcp!("Failed to read {CONFIG_FILEPATH}"))?
-            .pipe_borrow(toml::from_str::<AppConfig>)
-            .context(formatcp!("Failed to parse {CONFIG_FILEPATH}"))?
-    };
+    crate::config::init()?;
+    let config = crate::config::app_config();
 
     let app = Router::new()
         .merge(Router::new().route("/login", get(login_page).post(login_action)))
@@ -107,7 +97,7 @@ async fn login_page() -> impl IntoResponse {
 }
 
 async fn login_action(session: Session, Form(form): Form<LoginForm>) -> impl IntoResponse {
-    if form.password == config::access_password() {
+    if form.password == crate::config::app_config().access_password {
         session
             .insert("is_authenticated", true)
             .await

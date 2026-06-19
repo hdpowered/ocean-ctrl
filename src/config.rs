@@ -1,21 +1,44 @@
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
+use config::{Config, Environment, File};
 use tap::Pipe;
 
-static ACCESS_PASSWORD: OnceLock<String> = OnceLock::new();
+use crate::models::AppConfig;
 
-pub fn access_password() -> &'static str {
-    ACCESS_PASSWORD
+const PREFIX: &str = "OCEAN_CTRL";
+const DEFAULT_CONFIG_FILEPATH: &str = "config.toml";
+
+static APP_CONFIG: OnceLock<AppConfig> = OnceLock::new();
+
+pub fn app_config() -> AppConfig {
+    APP_CONFIG
         .get()
-        .expect("ACCESS_PASSWORD has to be initialized")
+        .expect("APP_CONFIG has to be initialized")
+        .clone()
 }
 
 pub fn init() -> Result<()> {
-    std::env::var("ACCESS_PASSWORD")
-        .context("ACCESS_PASSWORD environment variable is not set")?
-        .pipe(|v| ACCESS_PASSWORD.set(v))
-        .expect("Failed to set ACCESS_PASSWORD");
+    let config_filepath = std::env::var(key("CONFIG_FILEPATH"))
+        .unwrap_or_else(|_| DEFAULT_CONFIG_FILEPATH.to_owned());
 
+    let settings = Config::builder()
+        .add_source(config_filepath.pipe_borrow(File::with_name))
+        .add_source(PREFIX.pipe(Environment::with_prefix))
+        .build()
+        .context("Failed to build server config")?;
+
+    settings
+        .try_deserialize::<AppConfig>()
+        .context("Failed to deserialize server config")?
+        .pipe(|config| {
+            APP_CONFIG
+                .set(config)
+                .expect("Failed to set ACCESS_PASSWORD")
+        });
     Ok(())
+}
+
+fn key(key: &str) -> String {
+    format!("{PREFIX}_{key}")
 }

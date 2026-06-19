@@ -5,6 +5,7 @@ pub struct AppConfig {
     pub host: String,
     pub port: u16,
     pub servers: Vec<GameServerConfig>,
+    pub access_password: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
